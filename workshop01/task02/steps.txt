@@ -1,0 +1,5 @@
+To launch the container service:
+docker-compose up -d
+
+To down the containers:
+docker-compose down
