@@ -1,0 +1,64 @@
+---
+### Namespace ###
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dov-ns
+  labels:
+    app: dov-bear
+---
+### Deployment ###
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dov-deploy
+  namespace: dov-ns
+  labels:
+    app: dov-bear
+spec:
+  replicas: 3 # HA deployment
+  selector:
+    matchLabels:
+      app: dov-bear
+  template: # POD TEMPLATE
+    metadata:
+      name: dov-pod
+      labels:
+        app: dov-bear
+        name: dov-po
+    spec:
+      containers:
+        - name: my-container
+          image: chukmunnlee/dov-bear:v4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: INSTANCE_NAME
+              value: "my-pod"
+            - name: INSTANCE_HASH
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+---
+### Services ###
+apiVersion: v1
+kind: Service
+metadata:
+  name: dov-svc
+  namespace: dov-ns
+  labels:
+    app: dov-bear
+spec:
+  type: LoadBalancer # Cluster IP are internal service (in terms of k8 clusters)
+  # Loadbalancer will create a public IP for the service
+  selector:
+    name: dov-po
+    app: dov-bear
+  ports:
+    - port: 8080
+      targetPort: 3000
