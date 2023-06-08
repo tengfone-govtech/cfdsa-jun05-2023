@@ -1,0 +1,130 @@
+---
+### Namespace ###
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: codeserver-ns
+  labels:
+    app: codeserver
+---
+# Persistent volume claim (PVC)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: codeserver-pvc
+  namespace: codeserver-ns
+  labels:
+    app: codeserver
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: do-block-storage
+  resources:
+    requests:
+      storage: 1Gi
+---
+### Deployment ###
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codeserver-deploy
+  namespace: codeserver-ns
+  labels:
+    app: codeserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: codeserver-po
+      app: codeserver
+  template: # POD TEMPLATE
+    metadata:
+      name: codeserver-po
+      labels:
+        app: codeserver
+        name: codeserver-po
+    spec:
+      volumes:
+        - name: codeserver-vol
+          persistentVolumeClaim:
+            claimName: codeserver-pvc
+      containers:
+        - name: codeserver-container
+          image: linuxserver/code-server:amd64-4.13.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: codeserver-vol
+              mountPath: /config/workspace
+          envFrom:
+            - configMapRef:
+                name: codeserver-cm
+            - secretRef:
+                name: codeserver-secret
+---
+### Services ###
+apiVersion: v1
+kind: Service
+metadata:
+  name: codeserver-svc
+  namespace: codeserver-ns
+  labels:
+    app: codeserver
+spec:
+  type: ClusterIP
+  selector:
+    name: codeserver-po
+    app: codeserver
+  ports:
+    - name: codeserver-port
+      port: 8443
+      protocol: TCP
+      targetPort: 8443
+---
+### INGRESS ###
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: codeserver-ing
+  namespace: codeserver-ns
+  labels:
+    app: codeserver
+    name: codeserver-ing
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: code-146.190.6.57.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: codeserver-svc
+                port:
+                  name: codeserver-port
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: codeserver-cm
+  namespace: codeserver-ns
+  labels:
+    app: codeserver
+data:
+  TZ: Asia/Singapore
+  PROXY_DOMAIN: code-146.190.6.57.nip.io
+  DEFAULT_WORKSPACE: /config/workspace
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: codeserver-secret
+  namespace: codeserver-ns
+  labels:
+    app: codeserver
+type: Opaque
+data:
+  PASSWORD: Y2hhbmdlaXQ=
+  SUDO_PASSWORD: Y2hhbmdlaXQ=

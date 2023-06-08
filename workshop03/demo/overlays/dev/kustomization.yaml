@@ -1,0 +1,39 @@
+# k apply -k . -oyaml --dryrun=client
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../base/
+
+commonLabels:
+  env: dev
+
+namespace: dev-ns
+
+namePrefix: dev-
+nameSuffix: -team1
+
+replicas:
+  - name: dov-deploy
+    count: 1
+
+images:
+  - name: chkmunnlee/dov-bear
+    newTag: v3
+
+patches:
+  - target:
+      version: v1
+      kind: Service
+      name: dov-svc
+    patch: patch.yaml
+    # patch: |-
+    #   - op: "replace"
+    #     path: /spec/type
+    #     value: ClusterIP
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: dov-deploy
+    path: patch-deploy.yaml
