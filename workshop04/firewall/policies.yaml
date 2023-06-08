@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: bggns
+  labels:
+    app: bgg
+    name: deny-all
+spec:
+  podSelector:
+    matchLabels:
+      app: bgg
+      name: bggapp-po
+  policyTypes:
+    ## Dont allow any traffic through ##
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-access
+  namespace: bggns
+  labels:
+    app: bgg
+    name: allow-access
+spec:
+  podSelector:
+    matchLabels:
+      app: bgg
+      name: bggapp-po
+  policyTypes:
+    - Ingress
+  ingress:
+    - to:
+        - podSelector:
+            matchLabels:
+              ## k get po -nggens --show-labels
+              ## k label po/netshoot -nbggns web-access=true # To add label
+              ## k label po/netshoot -nbggns web-access- # To remove
+              web-access: "true"

@@ -1,0 +1,143 @@
+---
+### Namespace ###
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bggns
+  labels:
+    app: bgg
+---
+### Database Deployment ###
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bggdb-deploy
+  namespace: bggns
+  labels:
+    app: bgg
+spec:
+  replicas: 1 # HA deployment
+  selector:
+    matchLabels:
+      app: bgg
+      name: bggdb-po
+  template: # POD TEMPLATE
+    metadata:
+      name: bggdb-po
+      labels:
+        app: bgg
+        name: bggdb-po
+    spec:
+      containers:
+        - name: bggdb-container
+          image: stackupiss/bgg-database:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: bggdb-port
+              containerPort: 3306
+---
+### bggdb Services ###
+apiVersion: v1
+kind: Service
+metadata:
+  name: bggdb-svc
+  namespace: bggns
+  labels:
+    app: bgg
+    name: bggdb-svc
+spec:
+  type: ClusterIP # Cluster IP are internal service (in terms of k8 clusters)
+  # Loadbalancer will create a public IP for the service
+  selector:
+    name: bggdb-po
+    app: bgg
+  ports:
+    - port: 3306
+      targetPort: bggdb-port
+---
+### Backend Deployment ###
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bggapp-deploy
+  namespace: bggns
+  labels:
+    app: bgg
+    name: bggapp-deploy
+spec:
+  replicas: 3 # HA deployment
+  selector:
+    matchLabels: # matchlabels not needed in services
+      app: bgg
+      name: bggapp-po
+  template: # POD TEMPLATE
+    metadata:
+      name: bggapp-po
+      labels:
+        app: bgg
+        name: bggapp-po
+    spec:
+      containers:
+        - name: bggapp-container
+          image: stackupiss/bgg-backend:v1
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: bgg-cm
+            - secretRef:
+                name: bgg-secret
+          ports:
+            - name: bggapp-port
+              containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+---
+### bggapp Services ###
+apiVersion: v1
+kind: Service
+metadata:
+  name: bggapp-svc
+  namespace: bggns
+  labels:
+    name: bggapp-svc
+    app: bgg
+spec:
+  type: ClusterIP # Cluster IP are internal service (in terms of k8 clusters)
+  # Loadbalancer will create a public IP for the service
+  selector:
+    name: bggapp-po
+    app: bgg
+  ports:
+    - name: bggapp-port
+      port: 3000
+      targetPort: bggapp-port
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bgg-cm
+  namespace: bggns
+  labels:
+    app: bgg
+    name: bgg-cm
+data:
+  BGG_DB_USER: root
+  BGG_DB_HOST: bggdb-svc.bggns.svc.cluster.local
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bgg-secret
+  namespace: bggns
+  labels:
+    app: bgg
+    name: bgg-secret
+type: Opaque # Generic Secret
+data:
+  BGG_DB_PASSWORD: Y2hhbmdlaXQ=

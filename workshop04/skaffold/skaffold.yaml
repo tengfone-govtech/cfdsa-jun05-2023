@@ -1,0 +1,30 @@
+apiVersion: skaffold/v4beta5
+kind: Config
+metadata:
+  name: build-dov-golang
+
+build:
+  artifacts:
+    - image: phangtf/sk-dov-bear-golang
+      context: golang
+      docker:
+        dockerfile: Dockerfile
+  local:
+    tryImportMissing: true
+  tagPolicy:
+    envTemplate:
+      template: "{{.TAG_VERSION}}"
+
+manifests:
+  rawYaml:
+    - golang/dov-bear.yaml
+
+deploy:
+  kubectl: {}
+
+portForward:
+  - resourceType: service
+    resourceName: dov-svc
+    namespace: dov-ns
+    port: 8080
+    localPort: 8080

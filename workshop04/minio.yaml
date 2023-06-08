@@ -1,0 +1,158 @@
+---
+### Namespace ###
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio-ns
+  labels:
+    app: minio
+---
+## Headless Service ##
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-hsvc
+  namespace: minio-ns
+  labels:
+    app: minio
+    name: minio-hsvc
+spec:
+  clusterIP: None
+  selector:
+    app: minio
+    name: minio-po
+  ports:
+    - name: data-minio
+      port: 9000
+      targetPort: 9000
+    - name: web-minio
+      port: 9001
+      targetPort: 9001
+---
+## Headful Service ##
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-svc
+  namespace: minio-ns
+  labels:
+    app: minio
+    name: minio-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: minio
+    name: minio-po
+  ports:
+    - name: data-minio
+      port: 9000
+      targetPort: 9000
+    - name: web-minio
+      port: 9001
+      targetPort: 9001
+---
+## StatefulSet ##
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio-sts
+  namespace: minio-ns
+  labels:
+    app: minio
+    name: minio-sts
+spec:
+  replicas: 4
+  serviceName: minio-hsvc
+  selector:
+    matchLabels:
+      app: minio
+      name: minio-po
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data-vol
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: do-block-storage
+        resources:
+          requests:
+            storage: 1Gi
+  template:
+    metadata:
+      name: minio-po
+      labels:
+        app: minio
+        name: minio-po
+    spec:
+      initContainers:
+        - name: busybox
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - "chown 1001:1001 /data"
+          volumeMounts:
+            - name: data-vol
+              mountPath: /data
+      containers:
+        - name: minio-container
+          image: bitnami/minio:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - minio
+            - server
+            - --address=:9000
+            - --console-address=:9001
+            - http://minio-sts-{0...3}.minio-hsvc.minio-ns.svc.cluster.local/data
+          env:
+            - name: MINIO_ROOT_USER
+              value: admin
+            - name: MINIO_ROOT_PASSWORD
+              value: password
+          resources:
+            requests:
+              cpu: 200m
+              memory: 250Mi
+          ports:
+            - name: data-port
+              containerPort: 9000
+            - name: web-port
+              containerPort: 9001
+          volumeMounts:
+            - name: data-vol
+              mountPath: /data
+---
+## INGRESS ##
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-ing
+  namespace: minio-ns
+  labels:
+    app: minio
+    name: minio-ing
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: data-146.190.6.57.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio-svc
+                port:
+                  number: 9000
+    - host: console-146.190.6.57.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio-svc
+                port:
+                  number: 9001

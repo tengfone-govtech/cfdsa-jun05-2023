@@ -1,0 +1,113 @@
+---
+### Namespace ###
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dov-ns
+  labels:
+    app: dov-bear
+---
+### Deployment ###
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dov-deploy
+  namespace: dov-ns
+  labels:
+    app: dov-bear
+spec:
+  replicas: 3 # HA deployment
+  selector:
+    matchLabels:
+      app: dov-bear
+  template: # POD TEMPLATE
+    metadata:
+      name: dov-pod
+      labels:
+        app: dov-bear
+        name: dov-po
+    spec:
+      containers:
+        - name: my-container
+          image: chukmunnlee/dov-bear:v4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: INSTANCE_NAME
+              value: "my-pod"
+            - name: INSTANCE_HASH
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+          resources:
+            requests:
+              cpu: 64m
+              memory: 128Mi
+            limits:
+              cpu: 64m
+              memory: 128Mi
+---
+### Services ###
+apiVersion: v1
+kind: Service
+metadata:
+  name: dov-svc
+  namespace: dov-ns
+  labels:
+    app: dov-bear
+spec:
+  type: ClusterIP # Cluster IP are internal service (in terms of k8 clusters)
+  # Loadbalancer will create a public IP for the service
+  selector:
+    name: dov-po
+    app: dov-bear
+  ports:
+    - port: 8080
+      targetPort: 3000
+---
+### AUTOSCALING
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: dov-hpa
+  namespace: dov-ns
+  labels:
+    app: dov-bear
+    name: dov-hpa
+spec:
+  minReplicas: 1
+  maxReplicas: 8
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dov-deploy
+  metrics:
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+# Headless service
+apiVersion: v1
+kind: Service
+metadata:
+  name: dov-hsvc
+  namespace: dov-ns
+  labels:
+    app: dov-bear
+    name: dov-hsvc
+spec:
+  clusterIP: None
+  selector:
+    name: dov-po
+    app: dov-bear
+  ports:
+    - port: 8080
+      targetPort: 3000
